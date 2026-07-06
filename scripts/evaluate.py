@@ -19,7 +19,7 @@ sys.path.insert(0, str(ROOT))
 from model.classifier import build_model
 from model.dataset import load_split
 
-DATA_DIR = ROOT / "data" / "raw"
+DATA_DIR = ROOT / "data" / "yoga-poses"
 CKPT = ROOT / "exports" / "pose_classifier.pt"
 
 

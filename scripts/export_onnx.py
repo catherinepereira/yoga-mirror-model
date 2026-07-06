@@ -53,6 +53,10 @@ def main() -> None:
         "labels": labels,
         "input_shape": [1, 3, IMG_SIZE, IMG_SIZE],
         "normalization": {"mean": IMAGENET_MEAN, "std": IMAGENET_STD},
+        # letterbox: pad to square with black, then resize, no crop. The browser
+        # must reproduce this exactly
+        "preprocess": "letterbox",
+        "pad_color": [0, 0, 0],
         "trained_at": datetime.now().isoformat(timespec="seconds"),
     }
     META_OUT.write_text(json.dumps(meta, indent=2) + "\n")

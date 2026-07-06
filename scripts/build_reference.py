@@ -31,7 +31,7 @@ sys.path.insert(0, str(ROOT))
 
 from model.angles import JOINT_NAMES, compute_angles
 
-DATA_DIR = ROOT / "data" / "raw"
+DATA_DIR = ROOT / "data" / "yoga-poses"
 OUT = ROOT / "exports" / "referencePoses.json"
 MODEL_PATH = ROOT / "exports" / "pose_landmarker_lite.task"
 MODEL_URL = (
@@ -48,54 +48,28 @@ FACE_ON = "Face the camera, full body in frame"
 FLOOR_SIDE = "Lie or kneel side-on to the camera"
 
 CAMERA_HINTS = {
-    "mountain": FACE_ON,
+    "boat-pose": FLOOR_SIDE,
+    "camel-pose": SIDE_ON,
+    "cat-pose": FLOOR_SIDE,
+    "child-pose": FLOOR_SIDE,
+    "cobra-pose": FLOOR_SIDE,
+    "cow-pose": FLOOR_SIDE,
+    "downward-dog": SIDE_ON,
+    "eagle-pose": FACE_ON,
+    "pigeon-pose": FLOOR_SIDE,
+    "tree-pose": FACE_ON,
+    "triangle-pose": SIDE_ON,
     "warrior-i": SIDE_ON,
     "warrior-ii": SIDE_ON,
-    "warrior-iii": SIDE_ON,
-    "triangle": SIDE_ON,
-    "tree": FACE_ON,
-    "chair": SIDE_ON,
-    "standing-forward-fold": SIDE_ON,
-    "half-moon": SIDE_ON,
-    "eagle": FACE_ON,
-    "easy-pose": FACE_ON,
-    "seated-forward-fold": FLOOR_SIDE,
-    "bound-angle": FACE_ON,
-    "head-to-knee": FLOOR_SIDE,
-    "boat": FLOOR_SIDE,
-    "cobra": FLOOR_SIDE,
-    "upward-dog": FLOOR_SIDE,
-    "bridge": FLOOR_SIDE,
-    "camel": SIDE_ON,
-    "bow": FLOOR_SIDE,
-    "wheel": FLOOR_SIDE,
-    "downward-dog": SIDE_ON,
-    "plank": SIDE_ON,
-    "side-plank": FACE_ON,
-    "crow": SIDE_ON,
-    "headstand": SIDE_ON,
-    "shoulder-stand": SIDE_ON,
-    "childs-pose": FLOOR_SIDE,
-    "corpse": FLOOR_SIDE,
-    "cat-cow": FLOOR_SIDE,
-    "pigeon": FLOOR_SIDE,
-    "happy-baby": FLOOR_SIDE,
 }
 
 NAME_OVERRIDES = {
     "warrior-i": "Warrior I",
     "warrior-ii": "Warrior II",
-    "warrior-iii": "Warrior III",
-    "standing-forward-fold": "Standing Forward Fold",
-    "seated-forward-fold": "Seated Forward Fold",
-    "head-to-knee": "Head-to-Knee",
-    "upward-dog": "Upward Dog",
+    "cat-pose": "Cat Pose",
+    "cow-pose": "Cow Pose",
+    "child-pose": "Child's Pose",
     "downward-dog": "Downward Dog",
-    "side-plank": "Side Plank",
-    "shoulder-stand": "Shoulder Stand",
-    "childs-pose": "Child's Pose",
-    "cat-cow": "Cat-Cow",
-    "happy-baby": "Happy Baby",
 }
 
 IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp"}
