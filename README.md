@@ -1,12 +1,17 @@
 # Yoga Mirror model
 
-Training repo for the Yoga Mirror pose classifier. Fine-tunes an image CNN on
-yoga photos and exports an ONNX artifact the app runs in the browser to name the
-pose you are in. The app lives in the sibling [yoga-mirror](../yoga-mirror) repo
-and depends only on the exported files, not on this code.
+Training repo for the Yoga Mirror pose classifier. Runs BlazePose over yoga
+photos, trains a small MLP on the normalized landmarks, and exports an ONNX
+artifact the app runs in the browser to name the pose you are in. The app lives
+in the sibling [yoga-mirror](../yoga-mirror) repo and depends only on the exported
+files, not on this code.
 
-The app's live alignment scoring is separate and uses BlazePose joint angles.
-This model only answers "which pose is this" from the image.
+The classifier reads body geometry, not pixels, so a pose the model learned from
+studio photos still reads correctly on a home webcam with a different background
+and lighting.
+
+The app's live alignment scoring uses BlazePose joint angles built here too, so
+the photo dataset stays in one place.
 
 ## Setup
 
@@ -20,25 +25,29 @@ A CUDA GPU is used automatically if present. Training is a short fine-tune.
 
 ## Data
 
-Photos live in `data/raw/<pose-id>/`, one folder per pose (gitignored). Fetch or
-top up with the keyless image fetch (needs the local prompt2dataset checkout):
-
-```bash
-python scripts/fetch_data.py
-```
-
-It reuses prompt2dataset's image sources (Bing, DuckDuckGo, Wikimedia, Openverse)
-with no API key. Re-running tops up toward 50 images per pose and is idempotent.
+Photos live in `data/yoga-poses/<pose-id>/`, one folder per pose (gitignored),
+curated with the sorty tool. Its `.sorty/` cache is ignored by the loaders.
 
 ## Train, export, evaluate
 
+The classifier trains on landmark features, so the pipeline is: detect poses
+once, cache the features, then train the MLP off the cache.
+
 ```bash
-python scripts/train.py --smoke     # 2-epoch pipeline check on a small slice
-python scripts/train.py             # real run, writes exports/pose_classifier.pt
-python scripts/export_onnx.py       # -> pose_classifier.onnx + model_meta.json
-python scripts/evaluate.py          # held-out accuracy and confusion pairs
-python scripts/evaluate_onnx.py     # parity: ONNX matches the .pt model
+python scripts/build_reference.py       # downloads the BlazePose .task (first run)
+python scripts/extract_landmarks.py     # -> exports/landmark_features.json
+python scripts/train_landmarks.py       # -> exports/pose_classifier.pt
+python scripts/export_landmarks_onnx.py # -> pose_classifier.onnx + model_meta.json
 ```
+
+Spot-check that BlazePose landed on the bodies before trusting the features:
+
+```bash
+python scripts/viz_poses.py             # skeleton overlays -> exports/pose-viz/
+```
+
+Open the per-pose contact sheets in `exports/pose-viz/`. Any image with no
+detection gets a red NO POSE banner.
 
 ## Reference pose targets
 
@@ -66,48 +75,48 @@ cp exports/model_meta.json      ../yoga-mirror/public/models/
 cp exports/referencePoses.json  ../yoga-mirror/src/data/
 ```
 
-`model_meta.json` carries the labels, input shape, and normalization constants so
-the browser preprocessing matches training. `referencePoses.json` is the target
-angle library for scoring.
+`model_meta.json` carries the labels and the feature spec so the browser builds
+the same input the model trained on. `referencePoses.json` is the target angle
+library for scoring.
 
 ## Architecture
 
 | Field | Value |
 | --- | --- |
-| Backbone | MobileNetV3-small, ImageNet-pretrained |
-| Head | final linear resized to the pose count (32) |
-| Input | 224x224 RGB, ImageNet normalization |
-| Augmentation | random resized crop, horizontal flip, rotation, color jitter |
-| Optimizer | AdamW, lr 3e-4 |
+| Feature | BlazePose 33 world landmarks, hip-centered and torso-scaled, 99-dim |
+| Model | 2-hidden-layer MLP (128 units), dropout 0.3 |
+| Augmentation | left-right mirror (negate x, swap left/right landmarks) |
+| Optimizer | AdamW, lr 1e-3, weight decay 1e-4 |
 | Output | per-class logits, softmax in the app |
+
+The feature is invariant to where the person stands and how far from the camera,
+so a pose reads the same near or far, left- or right-facing.
 
 ## Things that will bite you
 
-- **Domain gap.** Training photos are posed studio shots. The app runs the model
-  on a webcam frame in a home with a cluttered background and partial framing.
-  Held-out accuracy on studio photos overstates real webcam accuracy. The
-  horizontal flip and crop augmentation help a little. If it is too weak in
-  practice, the next step is cropping to the person with the BlazePose bounding
-  box before classifying.
-- **Preprocessing parity.** The browser reproduces the torchvision resize and
-  normalization by hand. A mismatch silently tanks accuracy. The app has a
-  fixture test that feeds a known image through both paths and compares logits.
-  Regenerate the fixture if the preprocessing changes here.
-- **ONNX export drift.** `evaluate_onnx.py` compares the exported model to the
-  checkpoint. Drift over 1e-4 means an operator fused wrong, do not ship it.
+- **Feature parity.** The browser normalizes live landmarks with
+  `src/lib/poseLandmarks.ts`, a port of `model/landmarks.py`. A mismatch feeds the
+  model a distribution it never trained on and tanks accuracy. A fixture test in
+  the app guards it, regenerate the fixture if the normalization changes here.
+- **Landmark quality.** The classifier is only as good as BlazePose on the
+  photos. Run `viz_poses.py` and skim the sheets, a class where the skeleton
+  misses the body will train the model on noise.
+- **ONNX export.** The MLP exports cleanly (no fusion ambiguity), but confirm the
+  browser end-to-end test still predicts the dataset poses after any change.
 
 ## Layout
 
 ```
 model/
-  classifier.py    MobileNetV3-small with a resized head
-  dataset.py       ImageFolder loader, split, transforms
+  landmarks.py       landmark normalization and mirror, ported to the app
+  landmark_mlp.py    the classifier MLP
+  angles.py          joint-angle math for the reference targets
 scripts/
-  fetch_data.py    keyless image fetch into data/raw/
-  train.py         fine-tune, --smoke for a quick check
-  export_onnx.py   checkpoint -> onnx + model_meta.json
-  evaluate.py      held-out accuracy and confusions
-  evaluate_onnx.py onnx-vs-checkpoint parity
-data/raw/          photos per pose (gitignored)
-exports/           .pt + .onnx + meta (gitignored)
+  extract_landmarks.py    BlazePose over the dataset -> feature cache
+  train_landmarks.py      train the MLP on the cache
+  export_landmarks_onnx.py checkpoint -> onnx + model_meta.json
+  build_reference.py      per-pose target angles -> referencePoses.json
+  viz_poses.py            skeleton overlays for spot-checking
+data/yoga-poses/     photos per pose (gitignored)
+exports/             .pt + .onnx + meta + feature cache (gitignored)
 ```
