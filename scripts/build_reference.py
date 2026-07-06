@@ -1,7 +1,7 @@
 """Build the reference-pose target library from the photo dataset.
 
-Runs BlazePose over every photo in data/raw/<pose-id>/, takes the per-pose median
-joint angle as the target with a tolerance from the spread, and writes
+Runs BlazePose over every photo in data/yoga-poses/<pose-id>/, takes the per-pose
+median joint angle as the target with a tolerance from the spread, and writes
 exports/referencePoses.json. That file is an artifact the app consumes, the same
 contract as the ONNX model. The app never reads this repo's data.
 
@@ -121,7 +121,7 @@ def ensure_model() -> None:
 
 def main() -> None:
     if not DATA_DIR.exists():
-        raise SystemExit(f"No dataset at {DATA_DIR}. Run scripts/fetch_data.py first.")
+        raise SystemExit(f"No dataset at {DATA_DIR}.")
 
     ensure_model()
     options = vision.PoseLandmarkerOptions(
