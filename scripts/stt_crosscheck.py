@@ -22,10 +22,8 @@ import sys
 import tempfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-
-# The frontend track this annotates, built by process_video.py
-FRONTEND_TRACKS = ROOT.parent / "yoga-mirror" / "public" / "tracks"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from track_common import youtube_url, track_path
 
 # Pose names fed to Whisper as an initial prompt, so it decodes the yoga terms
 # it otherwise mangles
@@ -69,7 +67,7 @@ def _download_audio(video_id: str, dest_dir: Path) -> Path:
     """Download the video's audio track as a wav for transcription."""
     from yt_dlp import YoutubeDL
 
-    url = f"https://www.youtube.com/watch?v={video_id}"
+    url = youtube_url(video_id)
     opts = {
         "format": "bestaudio/best",
         "outtmpl": str(dest_dir / "audio.%(ext)s"),
@@ -184,10 +182,10 @@ def annotate_track(video_id: str, model: str = "small") -> dict:
 
     Returns a summary dict. The track JSON gains `spokenPoses` and `crossCheck`.
     """
-    track_path = FRONTEND_TRACKS / f"{video_id}.json"
-    if not track_path.exists():
+    path = track_path(video_id)
+    if not path.exists():
         raise SystemExit(f"no track for {video_id}, run process_video.py first")
-    track = json.loads(track_path.read_text(encoding="utf-8"))
+    track = json.loads(path.read_text(encoding="utf-8"))
 
     with tempfile.TemporaryDirectory() as tmp:
         tmp_dir = Path(tmp)
@@ -199,7 +197,7 @@ def annotate_track(video_id: str, model: str = "small") -> dict:
 
     track["spokenPoses"] = mentions
     track["crossCheck"] = checks
-    track_path.write_text(json.dumps(track), encoding="utf-8")
+    path.write_text(json.dumps(track), encoding="utf-8")
 
     agree = sum(1 for c in checks if c["agree"])
     return {

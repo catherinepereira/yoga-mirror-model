@@ -142,6 +142,7 @@ model/
   landmark_mlp.py    the classifier MLP
   angles.py          joint-angle math for the reference targets
 scripts/
+  blazepose.py            shared pose detector (model path, options, decode)
   extract_landmarks.py    BlazePose over the dataset -> feature cache
   train_landmarks.py      train the MLP on the cache
   export_landmarks_onnx.py checkpoint -> onnx + model_meta.json
@@ -149,6 +150,7 @@ scripts/
   viz_poses.py            skeleton overlays for spot-checking
   process_video.py        a video -> follow-along track in the app
   stt_crosscheck.py       transcribe narration, cross-check the visual poses
+  track_common.py         shared paths + helpers for the two track scripts
 data/yoga-poses/     photos per pose (gitignored)
 exports/             .pt + .onnx + meta + feature cache (gitignored)
 ```

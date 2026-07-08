@@ -6,4 +6,5 @@ pillow==11.1.0
 scikit-learn==1.6.1
 mediapipe==0.10.35
 opencv-python==4.10.0.84
+# process_video.py also needs ffmpeg on PATH
 yt-dlp==2026.6.9

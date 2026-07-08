@@ -16,28 +16,18 @@ from __future__ import annotations
 
 import json
 import sys
-import urllib.request
 from pathlib import Path
 from statistics import median
 
-import numpy as np
-import mediapipe as mp
-from mediapipe.tasks import python as mp_python
-from mediapipe.tasks.python import vision
-from PIL import Image
-
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from model.angles import JOINT_NAMES, compute_angles
+from blazepose import PoseDetector
+from dataset import DATA_DIR, pose_folders
 
-DATA_DIR = ROOT / "data" / "yoga-poses"
 OUT = ROOT / "exports" / "referencePoses.json"
-MODEL_PATH = ROOT / "exports" / "pose_landmarker_lite.task"
-MODEL_URL = (
-    "https://storage.googleapis.com/mediapipe-models/pose_landmarker/"
-    "pose_landmarker_lite/float16/latest/pose_landmarker_lite.task"
-)
 
 MIN_VISIBILITY = 0.5
 MIN_TOLERANCE_DEG = 6
@@ -72,9 +62,6 @@ NAME_OVERRIDES = {
     "downward-dog": "Downward Dog",
 }
 
-IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp"}
-
-
 def mad_tolerance(values: list[float], center: float) -> float:
     """Median absolute deviation scaled to about one sigma, clamped to a range."""
     mad = median([abs(v - center) for v in values]) * 1.4826
@@ -83,16 +70,6 @@ def mad_tolerance(values: list[float], center: float) -> float:
 
 def to_name(folder: str) -> str:
     return NAME_OVERRIDES.get(folder) or folder.replace("-", " ").title()
-
-
-def landmarks_of(result) -> list[tuple] | None:
-    """First detected pose as (x, y, z, visibility) world landmarks, or None."""
-    if not result.pose_world_landmarks:
-        return None
-    return [
-        (lm.x, lm.y, lm.z, lm.visibility)
-        for lm in result.pose_world_landmarks[0]
-    ]
 
 
 def build_targets(samples: list[list[tuple]]) -> dict:
@@ -111,42 +88,17 @@ def build_targets(samples: list[list[tuple]]) -> dict:
     return joints
 
 
-def ensure_model() -> None:
-    if MODEL_PATH.exists():
-        return
-    MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
-    print("downloading pose_landmarker_lite.task...")
-    urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
-
-
 def main() -> None:
     if not DATA_DIR.exists():
         raise SystemExit(f"No dataset at {DATA_DIR}.")
 
-    ensure_model()
-    options = vision.PoseLandmarkerOptions(
-        base_options=mp_python.BaseOptions(model_asset_path=str(MODEL_PATH)),
-        running_mode=vision.RunningMode.IMAGE,
-        num_poses=1,
-        min_pose_detection_confidence=0.5,
-    )
-
     poses = []
-    with vision.PoseLandmarker.create_from_options(options) as landmarker:
-        for folder in sorted(p.name for p in DATA_DIR.iterdir() if p.is_dir()):
-            files = [
-                f
-                for f in (DATA_DIR / folder).iterdir()
-                if f.suffix.lower() in IMAGE_EXT
-            ]
+    with PoseDetector() as detect:
+        for folder, files in pose_folders():
             samples = []
             for f in files:
                 try:
-                    # Force RGB so a grayscale or palette image never yields a
-                    # single-channel tensor, which crashes the inference graph
-                    rgb = np.asarray(Image.open(f).convert("RGB"))
-                    image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-                    lms = landmarks_of(landmarker.detect(image))
+                    lms = detect.landmarks(f)
                     if lms:
                         samples.append(lms)
                 except Exception as e:

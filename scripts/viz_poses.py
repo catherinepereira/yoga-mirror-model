@@ -20,16 +20,16 @@ from pathlib import Path
 import cv2
 import numpy as np
 import mediapipe as mp
-from mediapipe.tasks import python as mp_python
-from mediapipe.tasks.python import vision
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parent.parent
-DATA_DIR = ROOT / "data" / "yoga-poses"
-OUT_DIR = ROOT / "exports" / "pose-viz"
-MODEL_PATH = ROOT / "exports" / "pose_landmarker_lite.task"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp"}
+from blazepose import make_landmarker
+from dataset import pose_folders
+
+OUT_DIR = ROOT / "exports" / "pose-viz"
+
 CELL = 260
 COLS = 6
 
@@ -65,34 +65,15 @@ def fit_cell(img: np.ndarray) -> np.ndarray:
 
 
 def main() -> None:
-    if not MODEL_PATH.exists():
-        raise SystemExit(
-            f"No landmarker at {MODEL_PATH}. Run scripts/build_reference.py first "
-            "to download it."
-        )
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-
-    options = vision.PoseLandmarkerOptions(
-        base_options=mp_python.BaseOptions(model_asset_path=str(MODEL_PATH)),
-        running_mode=vision.RunningMode.IMAGE,
-        num_poses=1,
-        min_pose_detection_confidence=0.5,
-    )
-
-    folders = sorted(
-        p for p in DATA_DIR.iterdir() if p.is_dir() and not p.name.startswith(".")
-    )
-    with vision.PoseLandmarker.create_from_options(options) as landmarker:
-        for folder in folders:
-            files = sorted(
-                f for f in folder.iterdir() if f.suffix.lower() in IMAGE_EXT
-            )
+    with make_landmarker() as landmarker:
+        for label, files in pose_folders():
             tiles, detected = [], 0
             for f in files:
                 try:
                     rgb = np.asarray(Image.open(f).convert("RGB"))
                 except Exception as e:
-                    print(f"warning: {folder.name}/{f.name}: {e}", file=sys.stderr)
+                    print(f"warning: {label}/{f.name}: {e}", file=sys.stderr)
                     continue
                 bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
                 image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
@@ -115,9 +96,9 @@ def main() -> None:
             for i, tile in enumerate(tiles):
                 r, c = divmod(i, COLS)
                 sheet[r * CELL : (r + 1) * CELL, c * CELL : (c + 1) * CELL] = tile
-            out = OUT_DIR / f"{folder.name}.png"
+            out = OUT_DIR / f"{label}.png"
             cv2.imwrite(str(out), sheet)
-            print(f"{folder.name}: {detected}/{len(tiles)} detected -> {out.name}")
+            print(f"{label}: {detected}/{len(tiles)} detected -> {out.name}")
 
     print(f"\nwrote sheets to {OUT_DIR.relative_to(ROOT)}")
 

@@ -28,21 +28,17 @@ from urllib.parse import parse_qs, urlparse
 
 import numpy as np
 import onnxruntime as ort
-import mediapipe as mp
-from mediapipe.tasks import python as mp_python
-from mediapipe.tasks.python import vision
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from model.angles import JOINT_NAMES, compute_angles
 from model.landmarks import normalize_landmarks
+from blazepose import PoseDetector, LANDMARKER_PATH, world_landmarks
+from track_common import FRONTEND_TRACKS, youtube_url, track_path
 
-# Where the frontend reads its bundled tracks. Tracks are written straight here
-FRONTEND_TRACKS = ROOT.parent / "yoga-mirror" / "public" / "tracks"
-
-LANDMARKER_PATH = ROOT / "exports" / "pose_landmarker_lite.task"
 CLASSIFIER_PATH = ROOT / "exports" / "pose_classifier.onnx"
 META_PATH = ROOT / "exports" / "model_meta.json"
 
@@ -88,7 +84,7 @@ def _download(video_id: str, dest_dir: Path) -> tuple[Path, str]:
             return f"{d}s is over the {MAX_DURATION_SEC}s cap"
         return None
 
-    url = f"https://www.youtube.com/watch?v={video_id}"
+    url = youtube_url(video_id)
     opts = {
         "format": "mp4/best",
         "outtmpl": str(dest_dir / "video.%(ext)s"),
@@ -152,59 +148,49 @@ def _flatten_screen(screen) -> list[float]:
     return out
 
 
+def _empty_frame(t: float) -> dict:
+    return {
+        "t": t,
+        "angles": [None] * len(JOINT_NAMES),
+        "visible": [False] * len(JOINT_NAMES),
+        "lm": None,
+        "pose": None,
+    }
+
+
 def _extract(frame_dir: Path) -> tuple[list[dict], int, int]:
     """Run BlazePose over the sampled frames, returning frames and frame size."""
     session, labels = _load_classifier()
-    options = vision.PoseLandmarkerOptions(
-        base_options=mp_python.BaseOptions(model_asset_path=str(LANDMARKER_PATH)),
-        running_mode=vision.RunningMode.IMAGE,
-        num_poses=1,
-        min_pose_detection_confidence=0.5,
-    )
-
     files = sorted(f for f in frame_dir.iterdir() if f.suffix.lower() == ".jpg")
     frames: list[dict] = []
     frame_w = frame_h = 0
 
-    with vision.PoseLandmarker.create_from_options(options) as landmarker:
+    with PoseDetector() as detect:
         for i, f in enumerate(files):
             t = i / SAMPLE_FPS
             try:
-                rgb = np.asarray(Image.open(f).convert("RGB"))
+                result = detect(f)
             except Exception as e:
                 print(f"warning: {f.name}: {e}", file=sys.stderr)
-                rgb = None
+                frames.append(_empty_frame(t))
+                continue
 
-            if rgb is not None and frame_w == 0:
-                frame_h, frame_w = rgb.shape[0], rgb.shape[1]
+            if frame_w == 0:
+                with Image.open(f) as img:
+                    frame_w, frame_h = img.size
 
-            result = None
-            if rgb is not None:
-                image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-                result = landmarker.detect(image)
-
-            if result and result.pose_world_landmarks and result.pose_landmarks:
-                world = [
-                    (lm.x, lm.y, lm.z, lm.visibility)
-                    for lm in result.pose_world_landmarks[0]
-                ]
-                screen = result.pose_landmarks[0]
+            world = world_landmarks(result)
+            if world and result.pose_landmarks:
                 angles, visible = _frame_angles(world)
                 frames.append({
                     "t": t,
                     "angles": angles,
                     "visible": visible,
-                    "lm": _flatten_screen(screen),
+                    "lm": _flatten_screen(result.pose_landmarks[0]),
                     "pose": _classify(session, labels, world),
                 })
             else:
-                frames.append({
-                    "t": t,
-                    "angles": [None] * len(JOINT_NAMES),
-                    "visible": [False] * len(JOINT_NAMES),
-                    "lm": None,
-                    "pose": None,
-                })
+                frames.append(_empty_frame(t))
 
             if (i + 1) % 200 == 0:
                 print(f"  {i + 1}/{len(files)} frames")
@@ -227,7 +213,7 @@ def _update_manifest(video_id: str, title: str) -> None:
 
 
 def process(source: str, title: str | None = None) -> str:
-    """Process a URL or local file into a bundled track. Returns the track id."""
+    """Process a URL or local file into a static track. Returns the track id."""
     for path in (LANDMARKER_PATH, CLASSIFIER_PATH, META_PATH):
         if not path.exists():
             raise SystemExit(f"missing {path.relative_to(ROOT)}, run the training scripts first")
@@ -264,7 +250,7 @@ def process(source: str, title: str | None = None) -> str:
         "frames": frames,
         "videoId": video_id,
     }
-    out_file = FRONTEND_TRACKS / f"{video_id}.json"
+    out_file = track_path(video_id)
     out_file.write_text(json.dumps(track))
     _update_manifest(video_id, title)
 
