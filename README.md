@@ -64,6 +64,36 @@ The angle math is a Python port of the app's, kept in step by a parity test
 (`tests/test_angle_parity.py`) against a fixture generated from the app's
 TypeScript.
 
+## Follow-along tracks
+
+The app's follow-along mode plays an instructor video and scores you against it.
+Each video is processed here into a track the app plays against, since the
+browser cannot read a cross-origin YouTube embed's pixels:
+
+```bash
+python scripts/process_video.py "https://youtu.be/VIDEO_ID"
+python scripts/process_video.py path/to/local.mp4 --title "Morning Flow"
+```
+
+This downloads the video (or reads a local file), samples frames, runs BlazePose,
+and writes `../yoga-mirror/public/tracks/<id>.json` plus a manifest entry. Each
+frame gets joint angles (for scoring), 2D landmarks (for the skeleton overlay),
+and a classified pose label. Needs `ffmpeg` on PATH.
+
+Optionally cross-check the narration against the visual poses:
+
+```bash
+pip install -r requirements-stt.txt   # Whisper + Demucs, large, Python 3.11
+python scripts/stt_crosscheck.py VIDEO_ID
+```
+
+This transcribes the audio with dinscribe, scans it for pose names against
+`scripts/pose_vocab.txt`, and folds `spokenPoses` and `crossCheck` into the
+track. A cue agrees when the spoken pose shows up on the visual track within a
+forward-leaning window, since the instructor names a pose before settling into
+it. The app shows a spoken cue when the narration names a pose the classifier is
+not showing.
+
 ## Artifacts the app consumes
 
 This repo exports three files. The app commits them and contains no training code
@@ -117,6 +147,8 @@ scripts/
   export_landmarks_onnx.py checkpoint -> onnx + model_meta.json
   build_reference.py      per-pose target angles -> referencePoses.json
   viz_poses.py            skeleton overlays for spot-checking
+  process_video.py        a video -> follow-along track in the app
+  stt_crosscheck.py       transcribe narration, cross-check the visual poses
 data/yoga-poses/     photos per pose (gitignored)
 exports/             .pt + .onnx + meta + feature cache (gitignored)
 ```
