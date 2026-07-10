@@ -8,3 +8,5 @@ mediapipe==0.10.35
 opencv-python==4.10.0.84
 # process_video.py also needs ffmpeg on PATH
 yt-dlp==2026.6.9
+# STT scripts (stt_crosscheck.py, mine_poses.py): Whisper + Demucs, needs Python 3.11
+dinscribe==0.2.0

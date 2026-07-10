@@ -1,0 +1,9 @@
+# YouTube videos to process into follow-along tracks, one URL per line.
+# Blank lines and #-comments are skipped.
+# Run:  python scripts/process_batch.py videos.txt
+
+https://www.youtube.com/watch?v=LqXZ628YNj4
+https://www.youtube.com/watch?v=Ho9em79_0qg
+https://www.youtube.com/watch?v=GLy2rYHwUqY
+https://www.youtube.com/watch?v=BPK9WNtpBgk
+https://www.youtube.com/watch?v=b1H3xO3x_Js

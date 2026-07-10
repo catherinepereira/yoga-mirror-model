@@ -7,7 +7,6 @@ webcam far better than a raw-image classifier.
 
 A port of the app's src/lib/poseLandmarks.ts. The two must stay in step, since
 the app feeds live BlazePose landmarks through the same normalization at runtime.
-A shared fixture test (tests/test_landmark_parity) guards that.
 """
 
 from __future__ import annotations
@@ -49,24 +48,14 @@ def normalize_landmarks(landmarks) -> list[float]:
     return feat
 
 
-def mirror_landmarks(landmarks) -> list[tuple]:
-    """Left-right flip: negate x and swap left/right landmark pairs.
-
-    Makes the classifier symmetric so a pose facing either way reads the same,
-    matching how a person faces a mirrored webcam.
-    """
-    flipped = [(-lm[0],) + tuple(lm[1:]) for lm in landmarks]
-    for left, right in _LR_PAIRS:
-        flipped[left], flipped[right] = flipped[right], flipped[left]
-    return flipped
-
-
 def mirror_feature(feature: list[float]) -> list[float]:
-    """Mirror a normalized feature vector, matching mirror_landmarks in xyz space.
+    """Left-right flip of a normalized feature vector.
 
     Hip-centering and torso scale are mirror-symmetric, so flipping the feature is
     the same as normalizing a mirrored pose: negate every x, swap left/right xyz
-    triples. Used for training-time augmentation off the cached features.
+    triples. Makes the classifier symmetric so a pose facing either way reads the
+    same, matching a mirrored webcam. Used for training-time augmentation off the
+    cached features
     """
     pts = [feature[i : i + 3] for i in range(0, len(feature), 3)]
     pts = [[-x, y, z] for x, y, z in pts]

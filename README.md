@@ -21,7 +21,8 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-A CUDA GPU is used automatically if present. Training is a short fine-tune.
+Needs Python 3.11 (dinscribe, used by the STT scripts). A CUDA GPU is used
+automatically if present. Training is a short fine-tune.
 
 ## Data
 
@@ -72,18 +73,34 @@ browser cannot read a cross-origin YouTube embed's pixels:
 
 ```bash
 python scripts/process_video.py "https://youtu.be/VIDEO_ID"
-python scripts/process_video.py path/to/local.mp4 --title "Morning Flow"
 ```
 
-This downloads the video (or reads a local file), samples frames, runs BlazePose,
-and writes `../yoga-mirror/public/tracks/<id>.json` plus a manifest entry. Each
-frame gets joint angles (for scoring), 2D landmarks (for the skeleton overlay),
-and a classified pose label. Needs `ffmpeg` on PATH.
+This downloads the video, samples frames, runs BlazePose, and writes
+`../yoga-mirror/public/tracks/<id>.json` plus a manifest entry. Each frame gets
+joint angles (for scoring), 2D landmarks (for the skeleton overlay), and a
+classified pose label. The track title comes from the video. It also caches the
+world landmarks to `exports/skeletons/<id>.json` and prints the detected poses
+and low-confidence guesses. Needs `ffmpeg` on PATH.
+
+For a batch, list the YouTube URLs in `videos.txt` (one per line) and process
+them in one run. Each video is transcribed as well, so the report shows the
+detected poses, low-confidence visual guesses, and spoken poses the dataset does
+not cover. The skeleton and transcript are cached under `exports/`:
+
+```bash
+python scripts/process_batch.py videos.txt
+```
+
+Re-run the classifier over a cached skeleton without re-downloading, after
+retraining the model or changing the angle math:
+
+```bash
+python scripts/reclassify.py VIDEO_ID   # or --all for every cached skeleton
+```
 
 Optionally cross-check the narration against the visual poses:
 
 ```bash
-pip install -r requirements-stt.txt   # Whisper + Demucs, large, Python 3.11
 python scripts/stt_crosscheck.py VIDEO_ID
 ```
 
@@ -93,6 +110,23 @@ track. A cue agrees when the spoken pose shows up on the visual track within a
 forward-leaning window, since the instructor names a pose before settling into
 it. The app shows a spoken cue when the narration names a pose the classifier is
 not showing.
+
+## Finding poses to add
+
+The classifier only knows the 14 poses in `data/yoga-poses/`. To see what to
+collect next, transcribe a batch of videos and report the poses their narration
+names but the dataset does not:
+
+```bash
+python scripts/mine_poses.py urls.txt   # one YouTube URL or id per line
+```
+
+Two passes per transcript. The phrase pass pulls every "X pose" / "X posture"
+cue and drops the ones that name a dataset pose, ranked by how often they come up
+across the batch. The rare-word pass counts every spoken word and lists the
+least-frequent remainder, which catches poses cued without the word "pose"
+(savasana, plank) that the phrase pass misses. Writes
+`exports/candidate_poses.json` and prints a summary. Needs the STT deps.
 
 ## Artifacts the app consumes
 
@@ -111,13 +145,13 @@ library for scoring.
 
 ## Architecture
 
-| Field | Value |
-| --- | --- |
-| Feature | BlazePose 33 world landmarks, hip-centered and torso-scaled, 99-dim |
-| Model | 2-hidden-layer MLP (128 units), dropout 0.3 |
-| Augmentation | left-right mirror (negate x, swap left/right landmarks) |
-| Optimizer | AdamW, lr 1e-3, weight decay 1e-4 |
-| Output | per-class logits, softmax in the app |
+| Field        | Value                                                               |
+| ------------ | ------------------------------------------------------------------- |
+| Feature      | BlazePose 33 world landmarks, hip-centered and torso-scaled, 99-dim |
+| Model        | 2-hidden-layer MLP (128 units), dropout 0.3                         |
+| Augmentation | left-right mirror (negate x, swap left/right landmarks)             |
+| Optimizer    | AdamW, lr 1e-3, weight decay 1e-4                                   |
+| Output       | per-class logits, softmax in the app                                |
 
 The feature is invariant to where the person stands and how far from the camera,
 so a pose reads the same near or far, left- or right-facing.
@@ -148,9 +182,13 @@ scripts/
   export_landmarks_onnx.py checkpoint -> onnx + model_meta.json
   build_reference.py      per-pose target angles -> referencePoses.json
   viz_poses.py            skeleton overlays for spot-checking
-  process_video.py        a video -> follow-along track in the app
+  process_video.py        a video -> follow-along track + cached skeleton
+  process_batch.py        a videos.txt list -> a track each, with a pose report
+  reclassify.py           re-label a track from its cached skeleton, no download
   stt_crosscheck.py       transcribe narration, cross-check the visual poses
-  track_common.py         shared paths + helpers for the two track scripts
+  mine_poses.py           transcribe a batch, report poses not in the dataset
+  stt_common.py           shared audio download + dinscribe transcription
+  track_common.py         shared paths, id resolution, track helpers
 data/yoga-poses/     photos per pose (gitignored)
-exports/             .pt + .onnx + meta + feature cache (gitignored)
+exports/             .pt + .onnx + meta + feature cache + skeletons (gitignored)
 ```

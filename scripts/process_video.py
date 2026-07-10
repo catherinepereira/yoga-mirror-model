@@ -1,10 +1,10 @@
-"""Process a video into a follow-along track for the yoga-mirror frontend.
+"""Process a YouTube video into a follow-along track for the yoga-mirror frontend.
 
-Downloads a YouTube URL (or reads a local file), samples frames, runs BlazePose
-over each, and writes a track JSON the app plays against: per-frame joint angles
-(for scoring), 2D landmarks (for the skeleton overlay), and a classified pose
-label. The track lands in the frontend's public/tracks/ and the manifest is
-updated, so the app is fully static with no backend.
+Downloads the video, samples frames, runs BlazePose over each, and writes a track
+JSON the app plays against: per-frame joint angles (for scoring), 2D landmarks
+(for the skeleton overlay), and a classified pose label. The track lands in the
+frontend's public/tracks/ and the manifest is updated, so the app is fully static
+with no backend.
 
 Angles, landmark normalization, and the classifier are the same ones training
 uses (model/angles, model/landmarks, exports/pose_classifier.onnx), so a track
@@ -12,19 +12,16 @@ matches what the app computes from the live webcam.
 
 Run from the repo root:
     python scripts/process_video.py "https://youtu.be/VIDEO_ID"
-    python scripts/process_video.py path/to/local.mp4 --title "Morning Flow"
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import re
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
 
 import numpy as np
 import onnxruntime as ort
@@ -37,40 +34,22 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from model.angles import JOINT_NAMES, compute_angles
 from model.landmarks import normalize_landmarks
 from blazepose import PoseDetector, LANDMARKER_PATH, world_landmarks
-from track_common import FRONTEND_TRACKS, youtube_url, track_path
+from track_common import FRONTEND_TRACKS, youtube_url, track_path, resolve_video_id
 
 CLASSIFIER_PATH = ROOT / "exports" / "pose_classifier.onnx"
 META_PATH = ROOT / "exports" / "model_meta.json"
+SKELETON_DIR = ROOT / "exports" / "skeletons"
 
 SAMPLE_FPS = 5
 MAX_DURATION_SEC = 60 * 60
 MIN_VISIBILITY = 0.5
 MIN_LABEL_CONFIDENCE = 0.5
+# A pose the classifier's top guess named but wasn't confident about, worth
+# surfacing as a possible pose the dataset may be missing
+LOW_CONFIDENCE_FLOOR = 0.25
 # 4 decimals places a point on a 1080p frame and keeps the track from ballooning
 # once 33 xy pairs land on every frame
 COORD_PRECISION = 4
-
-_VIDEO_ID = re.compile(r"^[\w-]{11}$")
-_YOUTUBE_HOSTS = {"youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be"}
-
-
-def _video_id(url: str) -> str | None:
-    """Resolve an 11-character YouTube id from a URL, or None for a local file."""
-    raw = url.strip()
-    if _VIDEO_ID.fullmatch(raw):
-        return raw
-    parsed = urlparse(raw)
-    if parsed.hostname not in _YOUTUBE_HOSTS:
-        return None
-    if parsed.hostname == "youtu.be":
-        candidate = parsed.path.lstrip("/").split("/")[0]
-    elif parsed.path == "/watch":
-        candidate = parse_qs(parsed.query).get("v", [""])[0]
-    else:
-        parts = [p for p in parsed.path.split("/") if p]
-        candidate = parts[1] if len(parts) >= 2 and parts[0] in ("embed", "shorts") else ""
-    return candidate if _VIDEO_ID.fullmatch(candidate) else None
-
 
 def _download(video_id: str, dest_dir: Path) -> tuple[Path, str]:
     """Download a YouTube video by id, returning its path and title."""
@@ -117,14 +96,14 @@ def _load_classifier() -> tuple[ort.InferenceSession, list[str]]:
     return session, labels
 
 
-def _classify(session, labels, world) -> str | None:
-    """Top pose id for a frame's world landmarks, or None below the threshold."""
+def _classify(session, labels, world) -> tuple[str, float]:
+    """Top pose id and its softmax confidence for a frame's world landmarks."""
     feat = np.array([normalize_landmarks(world)], dtype=np.float32)
     logits = session.run(None, {session.get_inputs()[0].name: feat})[0][0]
     exps = np.exp(logits - logits.max())
     probs = exps / exps.sum()
     best = int(probs.argmax())
-    return labels[best] if probs[best] >= MIN_LABEL_CONFIDENCE else None
+    return labels[best], float(probs[best])
 
 
 def _frame_angles(world) -> tuple[list, list]:
@@ -158,11 +137,16 @@ def _empty_frame(t: float) -> dict:
     }
 
 
-def _extract(frame_dir: Path) -> tuple[list[dict], int, int]:
-    """Run BlazePose over the sampled frames, returning frames and frame size."""
+def _extract(frame_dir: Path) -> tuple[list[dict], list, int, int]:
+    """Run BlazePose over the sampled frames.
+
+    Returns the track frames, the per-frame world landmarks (for the skeleton
+    cache, None where no pose was found), and the frame pixel size
+    """
     session, labels = _load_classifier()
     files = sorted(f for f in frame_dir.iterdir() if f.suffix.lower() == ".jpg")
     frames: list[dict] = []
+    worlds: list = []
     frame_w = frame_h = 0
 
     with PoseDetector() as detect:
@@ -173,6 +157,7 @@ def _extract(frame_dir: Path) -> tuple[list[dict], int, int]:
             except Exception as e:
                 print(f"warning: {f.name}: {e}", file=sys.stderr)
                 frames.append(_empty_frame(t))
+                worlds.append(None)
                 continue
 
             if frame_w == 0:
@@ -182,20 +167,23 @@ def _extract(frame_dir: Path) -> tuple[list[dict], int, int]:
             world = world_landmarks(result)
             if world and result.pose_landmarks:
                 angles, visible = _frame_angles(world)
+                label, conf = _classify(session, labels, world)
                 frames.append({
                     "t": t,
                     "angles": angles,
                     "visible": visible,
                     "lm": _flatten_screen(result.pose_landmarks[0]),
-                    "pose": _classify(session, labels, world),
+                    "pose": label if conf >= MIN_LABEL_CONFIDENCE else None,
                 })
+                worlds.append(world)
             else:
                 frames.append(_empty_frame(t))
+                worlds.append(None)
 
             if (i + 1) % 200 == 0:
                 print(f"  {i + 1}/{len(files)} frames")
 
-    return frames, frame_w, frame_h
+    return frames, worlds, frame_w, frame_h
 
 
 def _update_manifest(video_id: str, title: str) -> None:
@@ -212,34 +200,69 @@ def _update_manifest(video_id: str, title: str) -> None:
     manifest_path.write_text(json.dumps(entries, indent=2) + "\n")
 
 
-def process(source: str, title: str | None = None) -> str:
-    """Process a URL or local file into a static track. Returns the track id."""
+def _save_skeleton(video_id: str, worlds: list) -> Path:
+    """Cache the per-frame world landmarks so the classifier can re-run offline.
+
+    The classifier keys on world landmarks, which the track JSON does not carry.
+    Saving them lets reclassify.py relabel a track without re-downloading the
+    video. Rounded to keep the file small, None where no pose was found
+    """
+    SKELETON_DIR.mkdir(parents=True, exist_ok=True)
+    frames = [
+        [[round(v, COORD_PRECISION) for v in lm] for lm in world] if world else None
+        for world in worlds
+    ]
+    out = SKELETON_DIR / f"{video_id}.json"
+    out.write_text(json.dumps({"fps": SAMPLE_FPS, "frames": frames}))
+    return out
+
+
+def _pose_summary(frames: list[dict], worlds: list) -> dict:
+    """Held poses and low-confidence visual guesses for the batch report.
+
+    `detected` is the poses the classifier held with confidence, by frame count.
+    `possible` is top guesses that cleared LOW_CONFIDENCE_FLOOR but not the label
+    threshold, poses the model half-saw that the dataset may be missing
+    """
+    session, labels = _load_classifier()
+    detected: dict[str, int] = {}
+    possible: dict[str, int] = {}
+    for frame, world in zip(frames, worlds):
+        if frame["pose"]:
+            detected[frame["pose"]] = detected.get(frame["pose"], 0) + 1
+        elif world is not None:
+            label, conf = _classify(session, labels, world)
+            if conf >= LOW_CONFIDENCE_FLOOR:
+                possible[label] = possible.get(label, 0) + 1
+    return {"detected": detected, "possible": possible}
+
+
+def process(source: str) -> dict:
+    """Process a YouTube URL/id into a static track.
+
+    Writes the track JSON, caches the skeleton for offline re-classifying, and
+    returns a summary: video id, title, and the detected and possible poses
+    """
     for path in (LANDMARKER_PATH, CLASSIFIER_PATH, META_PATH):
         if not path.exists():
             raise SystemExit(f"missing {path.relative_to(ROOT)}, run the training scripts first")
 
+    video_id = resolve_video_id(source)
+    if video_id is None:
+        raise SystemExit(f"not a YouTube URL or id: {source}")
     FRONTEND_TRACKS.mkdir(parents=True, exist_ok=True)
-    video_id = _video_id(source)
 
     with tempfile.TemporaryDirectory() as tmp:
         tmp_dir = Path(tmp)
         frame_dir = tmp_dir / "frames"
         frame_dir.mkdir()
 
-        if video_id:
-            video, fetched_title = _download(video_id, tmp_dir)
-            title = title or fetched_title
-        else:
-            video = Path(source)
-            if not video.exists():
-                raise SystemExit(f"no such file: {source}")
-            video_id = video.stem
-            title = title or video.stem
+        video, title = _download(video_id, tmp_dir)
 
         print(f"Sampling frames from {video.name}...")
         _sample_frames(video, frame_dir)
         print("Running BlazePose over the frames...")
-        frames, frame_w, frame_h = _extract(frame_dir)
+        frames, worlds, frame_w, frame_h = _extract(frame_dir)
 
     track = {
         "title": title,
@@ -253,18 +276,33 @@ def process(source: str, title: str | None = None) -> str:
     out_file = track_path(video_id)
     out_file.write_text(json.dumps(track))
     _update_manifest(video_id, title)
+    skeleton = _save_skeleton(video_id, worlds)
+    summary = _pose_summary(frames, worlds)
 
     measured = sum(1 for f in frames if f["pose"])
     print(f"\nWrote {len(frames)} frames ({measured} labeled) to {out_file}")
-    return video_id
+    print(f"Cached skeleton to {skeleton.relative_to(ROOT)}")
+    return {"videoId": video_id, "title": title, **summary}
+
+
+def print_poses(summary: dict) -> None:
+    """Detected, possible-visual, and (if present) possible-spoken poses."""
+    def line(counts: dict) -> str:
+        ranked = sorted(counts.items(), key=lambda kv: -kv[1])
+        return ", ".join(f"{p} ({n})" for p, n in ranked) or "none"
+
+    print(f"\n{summary['title']} ({summary['videoId']})")
+    print("  detected:", line(summary["detected"]))
+    print("  possible (visual):", line(summary["possible"]))
+    if "spoken" in summary:
+        print("  possible (spoken):", line(summary["spoken"]))
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Process a video into a follow-along track")
-    parser.add_argument("source", help="YouTube URL/id or a local video file path")
-    parser.add_argument("--title", help="Track title (defaults to the video title or filename)")
+    parser = argparse.ArgumentParser(description="Process a YouTube video into a follow-along track")
+    parser.add_argument("source", help="YouTube URL or id")
     args = parser.parse_args()
-    process(args.source, args.title)
+    print_poses(process(args.source))
 
 
 if __name__ == "__main__":

@@ -2,8 +2,9 @@
 
 Runs BlazePose over every photo in data/yoga-poses/<pose-id>/, takes the per-pose
 median joint angle as the target with a tolerance from the spread, and writes
-exports/referencePoses.json. That file is an artifact the app consumes, the same
-contract as the ONNX model. The app never reads this repo's data.
+exports/referencePoses.json. Each entry is the pose's folder id and joint targets,
+an artifact the app consumes. Display names live in the frontend, keyed by id. The
+app never reads this repo's data.
 
 BlazePose runs through the mediapipe Python package with the same lite model the
 app uses, so the angles match what the app computes at runtime.
@@ -33,43 +34,11 @@ MIN_VISIBILITY = 0.5
 MIN_TOLERANCE_DEG = 6
 MAX_TOLERANCE_DEG = 25
 
-SIDE_ON = "Stand side-on so the whole body is visible"
-FACE_ON = "Face the camera, full body in frame"
-FLOOR_SIDE = "Lie or kneel side-on to the camera"
-
-CAMERA_HINTS = {
-    "boat-pose": FLOOR_SIDE,
-    "camel-pose": SIDE_ON,
-    "cat-pose": FLOOR_SIDE,
-    "child-pose": FLOOR_SIDE,
-    "cobra-pose": FLOOR_SIDE,
-    "cow-pose": FLOOR_SIDE,
-    "downward-dog": SIDE_ON,
-    "eagle-pose": FACE_ON,
-    "pigeon-pose": FLOOR_SIDE,
-    "tree-pose": FACE_ON,
-    "triangle-pose": SIDE_ON,
-    "warrior-i": SIDE_ON,
-    "warrior-ii": SIDE_ON,
-}
-
-NAME_OVERRIDES = {
-    "warrior-i": "Warrior I",
-    "warrior-ii": "Warrior II",
-    "cat-pose": "Cat Pose",
-    "cow-pose": "Cow Pose",
-    "child-pose": "Child's Pose",
-    "downward-dog": "Downward Dog",
-}
 
 def mad_tolerance(values: list[float], center: float) -> float:
     """Median absolute deviation scaled to about one sigma, clamped to a range."""
     mad = median([abs(v - center) for v in values]) * 1.4826
     return min(MAX_TOLERANCE_DEG, max(MIN_TOLERANCE_DEG, mad))
-
-
-def to_name(folder: str) -> str:
-    return NAME_OVERRIDES.get(folder) or folder.replace("-", " ").title()
 
 
 def build_targets(samples: list[list[tuple]]) -> dict:
@@ -115,14 +84,7 @@ def main() -> None:
                 print(f"skip {folder}: no joints could be measured")
                 continue
 
-            poses.append(
-                {
-                    "id": folder,
-                    "name": to_name(folder),
-                    "cameraHint": CAMERA_HINTS.get(folder, FACE_ON),
-                    "joints": joints,
-                }
-            )
+            poses.append({"id": folder, "joints": joints})
             print(f"{folder}: {len(samples)}/{len(files)} images, {len(joints)} joints")
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
