@@ -1,4 +1,4 @@
-"""Process a YouTube video into a follow-along track for the lotus-pose frontend.
+"""Process a YouTube video into a follow-along track for the yoga-mirror frontend.
 
 Downloads the video, samples frames, runs BlazePose over each, and writes a track
 JSON the app plays against: per-frame joint angles (for scoring), 2D landmarks
@@ -47,6 +47,11 @@ MIN_LABEL_CONFIDENCE = 0.5
 # A pose the classifier's top guess named but wasn't confident about, worth
 # surfacing as a possible pose the dataset may be missing
 LOW_CONFIDENCE_FLOOR = 0.25
+
+# Timeline segmentation, applied after per-frame classification
+SMOOTH_SEC = 1.5     # mode-filter half-window: a pose must dominate this to hold
+MIN_SEGMENT_SEC = 5  # a pose must hold this long to earn a segment
+MERGE_GAP_SEC = 1.5  # rejoin same-pose runs across a gap this short (a transition)
 # 4 decimals places a point on a 1080p frame and keeps the track from ballooning
 # once 33 xy pairs land on every frame
 COORD_PRECISION = 4
@@ -237,6 +242,62 @@ def _pose_summary(frames: list[dict], worlds: list) -> dict:
     return {"detected": detected, "possible": possible}
 
 
+def _smooth_labels(labels: list, radius: int) -> list:
+    """Majority label in the window [i - r, i + r], a mode filter for flicker.
+
+    A stray label inside a held pose is outvoted by its neighbors. None (no
+    detection) votes too, so a pose wins a frame only if most of the window agrees
+    """
+    out = [None] * len(labels)
+    for i in range(len(labels)):
+        counts: dict = {}
+        lo = max(0, i - radius)
+        hi = min(len(labels) - 1, i + radius)
+        for j in range(lo, hi + 1):
+            counts[labels[j]] = counts.get(labels[j], 0) + 1
+        out[i] = max(counts, key=counts.get)
+    return out
+
+
+def _segment(frames: list[dict]) -> list[dict]:
+    """Collapse the per-frame labels into held-pose segments, and clean the labels.
+
+    Mode-filters the flicker, run-length encodes, drops runs under MIN_SEGMENT_SEC,
+    and rejoins the same pose across a short gap (a transition) but not a long one.
+    The smoothed label is written back onto each frame's `pose`, so the baked
+    labels match the segments. Returns the segment list
+    """
+    if not frames:
+        return []
+    frame_sec = 1 / SAMPLE_FPS
+    radius = max(1, round(SAMPLE_FPS * SMOOTH_SEC))
+    smoothed = _smooth_labels([f["pose"] for f in frames], radius)
+    for frame, pose in zip(frames, smoothed):
+        frame["pose"] = pose
+
+    segments: list[dict] = []
+    i = 0
+    n = len(smoothed)
+    while i < n:
+        pose = smoothed[i]
+        j = i
+        while j < n and smoothed[j] == pose:
+            j += 1
+        start = frames[i]["t"]
+        end = frames[j - 1]["t"] + frame_sec
+        if pose is not None and end - start >= MIN_SEGMENT_SEC:
+            last = segments[-1] if segments else None
+            if last and last["poseId"] == pose and start - last["end"] < MERGE_GAP_SEC:
+                last["end"] = end
+                last["durationSec"] = last["end"] - last["start"]
+            else:
+                segments.append(
+                    {"poseId": pose, "start": start, "end": end, "durationSec": end - start}
+                )
+        i = j
+    return segments
+
+
 def process(source: str) -> dict:
     """Process a YouTube URL/id into a static track.
 
@@ -264,6 +325,11 @@ def process(source: str) -> dict:
         print("Running BlazePose over the frames...")
         frames, worlds, frame_w, frame_h = _extract(frame_dir)
 
+    # Summary reads the raw confident labels, so take it before segmentation
+    # smooths the per-frame `pose` field
+    summary = _pose_summary(frames, worlds)
+    segments = _segment(frames)
+
     track = {
         "title": title,
         "durationSec": len(frames) / SAMPLE_FPS,
@@ -271,16 +337,15 @@ def process(source: str) -> dict:
         "frameWidth": frame_w,
         "frameHeight": frame_h,
         "frames": frames,
+        "segments": segments,
         "videoId": video_id,
     }
     out_file = track_path(video_id)
     out_file.write_text(json.dumps(track))
     _update_manifest(video_id, title)
     skeleton = _save_skeleton(video_id, worlds)
-    summary = _pose_summary(frames, worlds)
 
-    measured = sum(1 for f in frames if f["pose"])
-    print(f"\nWrote {len(frames)} frames ({measured} labeled) to {out_file}")
+    print(f"\nWrote {len(frames)} frames, {len(segments)} segments to {out_file}")
     print(f"Cached skeleton to {skeleton.relative_to(ROOT)}")
     return {"videoId": video_id, "title": title, **summary}
 

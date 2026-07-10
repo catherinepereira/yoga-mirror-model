@@ -25,6 +25,7 @@ from process_video import (
     _classify,
     _frame_angles,
     _load_classifier,
+    _segment,
 )
 from track_common import track_path
 
@@ -50,6 +51,7 @@ def reclassify(video_id: str) -> dict:
     counts: dict[str, int] = {}
     for frame, world in zip(frames, worlds):
         if world is None:
+            frame["pose"] = None
             continue
         angles, visible = _frame_angles(world)
         label, conf = _classify(session, labels, world)
@@ -59,6 +61,8 @@ def reclassify(video_id: str) -> dict:
         if frame["pose"]:
             counts[frame["pose"]] = counts.get(frame["pose"], 0) + 1
 
+    # Smooth the labels and rebuild the timeline segments, same as process_video
+    track["segments"] = _segment(frames)
     track_file.write_text(json.dumps(track))
     return counts
 
