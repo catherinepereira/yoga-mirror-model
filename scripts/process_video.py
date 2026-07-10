@@ -1,4 +1,4 @@
-"""Process a YouTube video into a follow-along track for the yoga-mirror frontend.
+"""Process a YouTube video into a follow-along track for the lotus-pose frontend.
 
 Downloads the video, samples frames, runs BlazePose over each, and writes a track
 JSON the app plays against: per-frame joint angles (for scoring), 2D landmarks

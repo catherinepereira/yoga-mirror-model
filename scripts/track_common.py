@@ -13,7 +13,7 @@ from urllib.parse import parse_qs, urlparse
 
 # The frontend reads its static tracks from here. Both scripts write to it
 FRONTEND_TRACKS = (
-    Path(__file__).resolve().parent.parent.parent / "yoga-mirror" / "public" / "tracks"
+    Path(__file__).resolve().parent.parent.parent / "lotus-pose" / "public" / "tracks"
 )
 
 _VIDEO_ID = re.compile(r"^[\w-]{11}$")

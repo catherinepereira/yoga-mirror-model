@@ -1,7 +1,7 @@
 """The Python angle math must match the app's TypeScript computeAngles.
 
 The fixture is generated from the TS implementation (the app's source of truth)
-by yoga-mirror/scripts/gen-angle-fixture.mts. If this drifts, the reference
+by lotus-pose/scripts/gen-angle-fixture.mts. If this drifts, the reference
 targets this repo exports would not match how the app scores at runtime.
 """
 

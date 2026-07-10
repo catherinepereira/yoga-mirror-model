@@ -1,9 +1,9 @@
-# Yoga Mirror model
+# Lotus Pose model
 
-Training repo for the Yoga Mirror pose classifier. Runs BlazePose over yoga
+Training repo for the Lotus Pose classifier. Runs BlazePose over yoga
 photos, trains a small MLP on the normalized landmarks, and exports an ONNX
 artifact the app runs in the browser to name the pose you are in. The app lives
-in the sibling [yoga-mirror](../yoga-mirror) repo and depends only on the exported
+in the sibling [lotus-pose](../lotus-pose) repo and depends only on the exported
 files, not on this code.
 
 The classifier reads body geometry, not pixels, so a pose the model learned from
@@ -76,7 +76,7 @@ python scripts/process_video.py "https://youtu.be/VIDEO_ID"
 ```
 
 This downloads the video, samples frames, runs BlazePose, and writes
-`../yoga-mirror/public/tracks/<id>.json` plus a manifest entry. Each frame gets
+`../lotus-pose/public/tracks/<id>.json` plus a manifest entry. Each frame gets
 joint angles (for scoring), 2D landmarks (for the skeleton overlay), and a
 classified pose label. The track title comes from the video. It also caches the
 world landmarks to `exports/skeletons/<id>.json` and prints the detected poses
@@ -134,9 +134,9 @@ This repo exports three files. The app commits them and contains no training cod
 or dataset access:
 
 ```bash
-cp exports/pose_classifier.onnx ../yoga-mirror/public/models/
-cp exports/model_meta.json      ../yoga-mirror/public/models/
-cp exports/referencePoses.json  ../yoga-mirror/src/data/
+cp exports/pose_classifier.onnx ../lotus-pose/public/models/
+cp exports/model_meta.json      ../lotus-pose/public/models/
+cp exports/referencePoses.json  ../lotus-pose/src/data/
 ```
 
 `model_meta.json` carries the labels and the feature spec so the browser builds
