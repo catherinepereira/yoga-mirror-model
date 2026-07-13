@@ -10,8 +10,9 @@ The classifier reads body geometry, not pixels, so a pose the model learned from
 studio photos still reads correctly on a home webcam with a different background
 and lighting.
 
-The app's live alignment scoring uses BlazePose joint angles built here too, so
-the photo dataset stays in one place.
+The app scores a pose by whether the classifier's top class is the target pose,
+so it inherits the classifier's rotation invariance. There is no separate
+angle-based scorer.
 
 ## Setup
 
@@ -50,24 +51,25 @@ python scripts/viz_poses.py             # skeleton overlays -> exports/pose-viz/
 Open the per-pose contact sheets in `exports/pose-viz/`. Any image with no
 detection gets a red NO POSE banner.
 
-## Reference pose targets
+For the classifier's held-out accuracy, confusion matrix, and per-class scores,
+run `notebooks/evaluate_classifier.ipynb`. It reproduces the training split with
+the same seed, so its numbers match the validation set the checkpoint was picked
+on.
 
-The app also scores live alignment against per-pose target angles. Those are
-built here from the same photos, so the dataset stays in one place:
+## Reference pose targets (not used by the app)
+
+`build_reference.py` writes per-pose median joint angles to
+`exports/referencePoses.json`. The app once scored live alignment against these,
+but now scores on the classifier's top class, so the app no longer reads this
+file. The script and its angle-parity test are kept for analysis of the dataset.
 
 ```bash
 python scripts/build_reference.py   # -> exports/referencePoses.json
 ```
 
-BlazePose runs through the mediapipe Python package (same lite model the app
-uses) over each photo, and the per-pose median joint angle becomes the target.
-The angle math is a Python port of the app's, kept in step by a parity test
-(`tests/test_angle_parity.py`) against a fixture generated from the app's
-TypeScript.
-
 ## Follow-along tracks
 
-The app's follow-along mode plays an instructor video and scores you against it.
+The app's follow-along mode plays an instructor video and matches you against it.
 Each video is processed here into a track the app plays against, since the
 browser cannot read a cross-origin YouTube embed's pixels:
 
@@ -113,9 +115,9 @@ not showing.
 
 ## Finding poses to add
 
-The classifier only knows the 14 poses in `data/yoga-poses/`. To see what to
-collect next, transcribe a batch of videos and report the poses their narration
-names but the dataset does not:
+The classifier only knows the poses with a folder in `data/yoga-poses/`. To see
+what to collect next, transcribe a batch of videos and report the poses their
+narration names but the dataset does not:
 
 ```bash
 python scripts/mine_poses.py urls.txt   # one YouTube URL or id per line
@@ -130,18 +132,17 @@ least-frequent remainder, which catches poses cued without the word "pose"
 
 ## Artifacts the app consumes
 
-This repo exports three files. The app commits them and contains no training code
+This repo exports two files. The app commits them and contains no training code
 or dataset access:
 
 ```bash
 cp exports/pose_classifier.onnx ../yoga-mirror/public/models/
 cp exports/model_meta.json      ../yoga-mirror/public/models/
-cp exports/referencePoses.json  ../yoga-mirror/src/data/
 ```
 
 `model_meta.json` carries the labels and the feature spec so the browser builds
-the same input the model trained on. `referencePoses.json` is the target angle
-library for scoring.
+the same input the model trained on. The label list is also what the app's pose
+library keys on, so keep `src/data/poses.ts` in step with it.
 
 ## Architecture
 
