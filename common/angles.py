@@ -3,7 +3,7 @@
 A Python port of the app's src/lib/angles.ts and joints.ts. The reference-pose
 builder uses it to turn pose photos into target angles. It must stay in step with
 the TypeScript version, since the app scores against angles computed the same way.
-A shared fixture test (tests/test_angle_parity) guards that.
+A shared fixture test (tests/test_angle_parity) guards it.
 """
 
 from __future__ import annotations

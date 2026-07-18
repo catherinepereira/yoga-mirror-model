@@ -2,15 +2,15 @@
 
 Runs BlazePose over every photo in data/yoga-poses/<pose-id>/, takes the per-pose
 median joint angle as the target with a tolerance from the spread, and writes
-exports/referencePoses.json. Each entry is the pose's folder id and joint targets,
-an artifact the app consumes. Display names live in the frontend, keyed by id. The
-app never reads this repo's data.
+exports/referencePoses.json. Each entry is the pose's folder id and joint targets.
+The app no longer scores against these (it scores on the classifier's top class),
+so this is kept for dataset analysis, not as an app artifact.
 
 BlazePose runs through the mediapipe Python package with the same lite model the
 app uses, so the angles match what the app computes at runtime.
 
 Run from the repo root:
-    python scripts/build_reference.py
+    python -m training.build_reference
 """
 
 from __future__ import annotations
@@ -20,14 +20,11 @@ import sys
 from pathlib import Path
 from statistics import median
 
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+from common.angles import JOINT_NAMES, compute_angles
+from common.blazepose import PoseDetector
+from common.dataset import DATA_DIR, pose_folders
 
-from model.angles import JOINT_NAMES, compute_angles
-from blazepose import PoseDetector
-from dataset import DATA_DIR, pose_folders
-
+ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "exports" / "referencePoses.json"
 
 MIN_VISIBILITY = 0.5

@@ -11,7 +11,7 @@ time) and `crossCheck` (agreements and disagreements), which the app shows when
 the instructor cues a pose. Run after process_video.py has built the track.
 
 Run from the repo root:
-    python scripts/stt_crosscheck.py VIDEO_ID [whisper_model]
+    python -m video.stt_crosscheck VIDEO_ID [whisper_model]
 """
 
 from __future__ import annotations
@@ -22,9 +22,8 @@ import sys
 import tempfile
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from track_common import track_path
-from stt_common import POSE_ALIASES, download_audio, transcribe
+from video.track_common import track_path
+from video.stt_common import POSE_ALIASES, download_audio, transcribe
 
 # A cue is checked against the visual track over a forward-leaning window: the
 # instructor names a pose, the class takes a while to settle into it, then holds
@@ -129,7 +128,7 @@ def annotate_track(video_id: str, model: str = "small") -> dict:
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("usage: python scripts/stt_crosscheck.py <video_id> [whisper_model]")
+        print("usage: python -m video.stt_crosscheck <video_id> [whisper_model]")
         sys.exit(1)
     model = sys.argv[2] if len(sys.argv) > 2 else "small"
     print(json.dumps(annotate_track(sys.argv[1], model), indent=2))

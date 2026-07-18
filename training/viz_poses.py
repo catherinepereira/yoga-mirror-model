@@ -1,6 +1,6 @@
 """Render BlazePose skeletons over the dataset for a visual spot-check.
 
-Runs the same PoseLandmarker the reference builder uses over every image, draws
+Runs the same PoseLandmarker the landmark extractor uses over every image, draws
 the detected skeleton on it, and tiles a contact sheet per pose into
 exports/pose-viz/. Open those PNGs to confirm the landmarks land on the body
 before trusting the poses that feed the classifier.
@@ -9,7 +9,7 @@ Images where no pose is detected get a red NO POSE banner, so a class full of
 misses is obvious at a glance.
 
 Run from the repo root:
-    python scripts/viz_poses.py
+    python -m training.viz_poses
 """
 
 from __future__ import annotations
@@ -22,12 +22,10 @@ import numpy as np
 import mediapipe as mp
 from PIL import Image
 
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+from common.blazepose import make_landmarker
+from common.dataset import pose_folders
 
-from blazepose import make_landmarker
-from dataset import pose_folders
-
+ROOT = Path(__file__).resolve().parents[1]
 OUT_DIR = ROOT / "exports" / "pose-viz"
 
 CELL = 260

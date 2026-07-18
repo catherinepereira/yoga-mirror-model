@@ -6,20 +6,16 @@ rewrites the pose labels and angles in the frontend track. Use it after
 retraining the model or changing the angle math to relabel existing tracks.
 
 Run from the repo root:
-    python scripts/reclassify.py VIDEO_ID          # one video
-    python scripts/reclassify.py --all             # every cached skeleton
+    python -m video.reclassify VIDEO_ID          # one video
+    python -m video.reclassify --all             # every cached skeleton
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-
-from process_video import (
+from video.process_video import (
     SKELETON_DIR,
     MIN_LABEL_CONFIDENCE,
     _classify,
@@ -27,7 +23,7 @@ from process_video import (
     _load_classifier,
     _segment,
 )
-from track_common import track_path
+from video.track_common import track_path
 
 
 def reclassify(video_id: str) -> dict:

@@ -11,7 +11,7 @@ import json
 import sys
 from pathlib import Path
 
-from track_common import youtube_url
+from video.track_common import youtube_url
 
 # Pose names fed to Whisper as an initial prompt, so it decodes the yoga terms
 # it otherwise mangles

@@ -20,7 +20,7 @@ from mediapipe.tasks import python as mp_python
 from mediapipe.tasks.python import vision
 from PIL import Image
 
-_ROOT = Path(__file__).resolve().parent.parent
+_ROOT = Path(__file__).resolve().parents[1]
 LANDMARKER_PATH = _ROOT / "exports" / "pose_landmarker_lite.task"
 _LANDMARKER_URL = (
     "https://storage.googleapis.com/mediapipe-models/pose_landmarker/"
@@ -85,7 +85,15 @@ class PoseDetector:
     def __call__(self, image_path: Path):
         """Detect on one image, returning the mediapipe result."""
         rgb = np.asarray(Image.open(image_path).convert("RGB"))
-        image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+        return self.detect_rgb(rgb)
+
+    def detect_rgb(self, rgb: np.ndarray):
+        """Detect on an already-decoded RGB array, returning the mediapipe result.
+
+        For a caller holding an in-memory image (an augmented frame), so it need not
+        round-trip through a file
+        """
+        image = mp.Image(image_format=mp.ImageFormat.SRGB, data=np.ascontiguousarray(rgb))
         return self._landmarker.detect(image)
 
     def landmarks(self, image_path: Path) -> list[tuple] | None:

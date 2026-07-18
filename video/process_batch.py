@@ -7,7 +7,7 @@ narration speaks that the dataset does not cover. The skeleton and transcript ar
 cached under exports/ so a video need not be re-downloaded to re-run either step.
 
 Run from the repo root:
-    python scripts/process_batch.py videos.txt [--model small]
+    python -m video.process_batch videos.txt [--model small]
 
 A failed video is reported and skipped, the rest keep going.
 """
@@ -18,11 +18,9 @@ import argparse
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-
-from process_video import process, print_poses
-from track_common import resolve_video_id
-from mine_poses import transcribe_video, spoken_candidates
+from video.process_video import process, print_poses
+from video.track_common import resolve_video_id
+from video.mine_poses import transcribe_video, spoken_candidates
 
 
 def _read_urls(path: Path) -> list[str]:

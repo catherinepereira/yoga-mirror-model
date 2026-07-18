@@ -7,11 +7,11 @@ frontend's public/tracks/ and the manifest is updated, so the app is fully stati
 with no backend.
 
 Angles, landmark normalization, and the classifier are the same ones training
-uses (model/angles, model/landmarks, exports/pose_classifier.onnx), so a track
+uses (common.angles, common.landmarks, exports/pose_classifier.onnx), so a track
 matches what the app computes from the live webcam.
 
 Run from the repo root:
-    python scripts/process_video.py "https://youtu.be/VIDEO_ID"
+    python -m video.process_video "https://youtu.be/VIDEO_ID"
 """
 
 from __future__ import annotations
@@ -27,15 +27,21 @@ import numpy as np
 import onnxruntime as ort
 from PIL import Image
 
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+from common.angles import JOINT_NAMES, compute_angles
+from common.landmarks import normalize_landmarks
+from common.blazepose import (
+    PoseDetector,
+    LANDMARKER_PATH,
+    world_landmarks,
+)
+from video.track_common import (
+    FRONTEND_TRACKS,
+    youtube_url,
+    track_path,
+    resolve_video_id,
+)
 
-from model.angles import JOINT_NAMES, compute_angles
-from model.landmarks import normalize_landmarks
-from blazepose import PoseDetector, LANDMARKER_PATH, world_landmarks
-from track_common import FRONTEND_TRACKS, youtube_url, track_path, resolve_video_id
-
+ROOT = Path(__file__).resolve().parents[1]
 CLASSIFIER_PATH = ROOT / "exports" / "pose_classifier.onnx"
 META_PATH = ROOT / "exports" / "model_meta.json"
 SKELETON_DIR = ROOT / "exports" / "skeletons"
@@ -55,6 +61,7 @@ MERGE_GAP_SEC = 1.5  # rejoin same-pose runs across a gap this short (a transiti
 # 4 decimals places a point on a 1080p frame and keeps the track from ballooning
 # once 33 xy pairs land on every frame
 COORD_PRECISION = 4
+
 
 def _download(video_id: str, dest_dir: Path) -> tuple[Path, str]:
     """Download a YouTube video by id, returning its path and title."""

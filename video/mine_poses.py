@@ -1,6 +1,6 @@
 """Mine instructor narration for poses not yet in the dataset.
 
-The classifier only knows the 14 poses in data/yoga-poses/. To grow that set,
+The classifier only knows the poses with a folder in data/yoga-poses/. To grow that set,
 this transcribes a batch of instructor videos and reports pose names the
 narration uses that the dataset does not cover, so you know what to collect next.
 
@@ -16,7 +16,7 @@ Two passes over each transcript:
      plank, malasana) that the phrase pass misses. For review, not automatic.
 
 Run from the repo root:
-    python scripts/mine_poses.py urls.txt [--model small] [--rare-words 40]
+    python -m video.mine_poses urls.txt [--model small] [--rare-words 40]
 
 urls.txt is one YouTube URL or id per line. Blank lines and #-comments skipped.
 Writes exports/candidate_poses.json and prints a summary.
@@ -33,10 +33,8 @@ from collections import Counter
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-
-from track_common import resolve_video_id
-from stt_common import POSE_ALIASES, download_audio, transcribe
+from video.track_common import resolve_video_id
+from video.stt_common import POSE_ALIASES, download_audio, transcribe
 
 OUT_PATH = ROOT / "exports" / "candidate_poses.json"
 TRANSCRIPT_DIR = ROOT / "exports" / "transcripts"

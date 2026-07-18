@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-_ROOT = Path(__file__).resolve().parent.parent
+_ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = _ROOT / "data" / "yoga-poses"
 IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp"}
 

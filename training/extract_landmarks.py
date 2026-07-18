@@ -1,12 +1,12 @@
 """Extract normalized landmark features from the dataset for the classifier.
 
 Runs BlazePose over every image, normalizes the world landmarks (see
-model/landmarks), and caches one feature vector per detected pose to
-exports/landmark_features.json. Training reads that cache instead of re-running
-detection, so a train run is fast and repeatable.
+common.landmarks), and caches one feature vector per detected pose to
+exports/landmark_features.json. The landmark experiment reads that cache instead
+of re-running detection, so a train run is fast and repeatable.
 
 Run from the repo root:
-    python scripts/extract_landmarks.py
+    python -m training.extract_landmarks
 """
 
 from __future__ import annotations
@@ -15,14 +15,11 @@ import json
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+from common.landmarks import normalize_landmarks
+from common.blazepose import PoseDetector
+from common.dataset import pose_folders
 
-from model.landmarks import normalize_landmarks
-from blazepose import PoseDetector
-from dataset import pose_folders
-
+ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "exports" / "landmark_features.json"
 
 MIN_VISIBILITY = 0.3

@@ -1,8 +1,8 @@
 """The Python angle math must match the app's TypeScript computeAngles.
 
-The fixture is generated from the TS implementation (the app's source of truth)
-by yoga-mirror/scripts/gen-angle-fixture.mts. If this drifts, the reference
-targets this repo exports would not match how the app scores at runtime.
+The fixture was generated from the TS implementation (the app's source of truth).
+If this drifts, the angles this repo computes for a track would not match how the
+app scores at runtime.
 """
 
 import json
@@ -12,7 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from model.angles import compute_angles
+from common.angles import compute_angles
 
 FIXTURE = ROOT / "tests" / "fixtures" / "angle_parity.json"
 
