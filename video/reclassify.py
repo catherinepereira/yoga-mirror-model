@@ -1,9 +1,9 @@
 """Re-run the classifier over a cached skeleton, without re-downloading the video.
 
 process_video caches each video's world landmarks to exports/skeletons/<id>.json.
-This reads that cache, re-runs the current classifier and angle math over it, and
-rewrites the pose labels and angles in the frontend track. Use it after
-retraining the model or changing the angle math to relabel existing tracks.
+This reads that cache, re-runs the current classifier over it, and rewrites the
+pose labels in the frontend track. Use it after retraining the model to relabel
+existing tracks.
 
 Run from the repo root:
     python -m video.reclassify VIDEO_ID          # one video
@@ -19,7 +19,6 @@ from video.process_video import (
     SKELETON_DIR,
     MIN_LABEL_CONFIDENCE,
     _classify,
-    _frame_angles,
     _load_classifier,
     _segment,
 )
@@ -46,13 +45,13 @@ def reclassify(video_id: str) -> dict:
     session, labels = _load_classifier()
     counts: dict[str, int] = {}
     for frame, world in zip(frames, worlds):
+        # drop the angle fields older tracks were built with, nothing reads them
+        frame.pop("angles", None)
+        frame.pop("visible", None)
         if world is None:
             frame["pose"] = None
             continue
-        angles, visible = _frame_angles(world)
         label, conf = _classify(session, labels, world)
-        frame["angles"] = angles
-        frame["visible"] = visible
         frame["pose"] = label if conf >= MIN_LABEL_CONFIDENCE else None
         if frame["pose"]:
             counts[frame["pose"]] = counts.get(frame["pose"], 0) + 1

@@ -1,14 +1,13 @@
 """Process a YouTube video into a follow-along track for the yoga-mirror frontend.
 
 Downloads the video, samples frames, runs BlazePose over each, and writes a track
-JSON the app plays against: per-frame joint angles (for scoring), 2D landmarks
-(for the skeleton overlay), and a classified pose label. The track lands in the
-frontend's public/tracks/ and the manifest is updated, so the app is fully static
-with no backend.
+JSON the app plays against: per-frame 2D landmarks (for the skeleton overlay) and
+a classified pose label. The track lands in the frontend's public/tracks/ and the
+manifest is updated, so the app is fully static with no backend.
 
-Angles, landmark normalization, and the classifier are the same ones training
-uses (common.angles, common.landmarks, exports/pose_classifier.onnx), so a track
-matches what the app computes from the live webcam.
+Landmark normalization and the classifier are the same ones training uses
+(common.landmarks, exports/pose_classifier.onnx), so a track matches what the app
+computes from the live webcam.
 
 Run from the repo root:
     python -m video.process_video "https://youtu.be/VIDEO_ID"
@@ -27,7 +26,6 @@ import numpy as np
 import onnxruntime as ort
 from PIL import Image
 
-from common.angles import JOINT_NAMES, compute_angles
 from common.landmarks import normalize_landmarks
 from common.blazepose import (
     PoseDetector,
@@ -48,7 +46,6 @@ SKELETON_DIR = ROOT / "exports" / "skeletons"
 
 SAMPLE_FPS = 5
 MAX_DURATION_SEC = 60 * 60
-MIN_VISIBILITY = 0.5
 MIN_LABEL_CONFIDENCE = 0.5
 # A pose the classifier's top guess named but wasn't confident about, worth
 # surfacing as a possible pose the dataset may be missing
@@ -118,18 +115,6 @@ def _classify(session, labels, world) -> tuple[str, float]:
     return labels[best], float(probs[best])
 
 
-def _frame_angles(world) -> tuple[list, list]:
-    """8-angle vector and visibility flags in JOINT_NAMES order."""
-    measured = compute_angles(world)
-    angles, visible = [], []
-    for name in JOINT_NAMES:
-        a = measured[name]
-        ok = a["angle"] is not None and a["visibility"] >= MIN_VISIBILITY
-        angles.append(a["angle"] if ok else None)
-        visible.append(ok)
-    return angles, visible
-
-
 def _flatten_screen(screen) -> list[float]:
     """Flatten the 33 image-space points to a rounded [x0,y0,x1,y1,...] vector."""
     out: list[float] = []
@@ -142,8 +127,6 @@ def _flatten_screen(screen) -> list[float]:
 def _empty_frame(t: float) -> dict:
     return {
         "t": t,
-        "angles": [None] * len(JOINT_NAMES),
-        "visible": [False] * len(JOINT_NAMES),
         "lm": None,
         "pose": None,
     }
@@ -178,12 +161,9 @@ def _extract(frame_dir: Path) -> tuple[list[dict], list, int, int]:
 
             world = world_landmarks(result)
             if world and result.pose_landmarks:
-                angles, visible = _frame_angles(world)
                 label, conf = _classify(session, labels, world)
                 frames.append({
                     "t": t,
-                    "angles": angles,
-                    "visible": visible,
                     "lm": _flatten_screen(result.pose_landmarks[0]),
                     "pose": label if conf >= MIN_LABEL_CONFIDENCE else None,
                 })

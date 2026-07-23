@@ -1,6 +1,6 @@
 """Shared dataset layout for the scripts that walk the pose photos.
 
-extract_landmarks, build_reference, and viz_poses all iterate the same
+extract_landmarks, extract_landmarks_aug, and viz_poses all iterate the same
 data/yoga-poses/<pose-id>/ tree and filter to the same image types.
 """
 

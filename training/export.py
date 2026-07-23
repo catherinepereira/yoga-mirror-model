@@ -52,6 +52,22 @@ def _export_onnx(model, dummy, onnx_out: Path) -> None:
         opset_version=17,
         dynamo=False,
     )
+    _assert_browser_runnable(onnx_out)
+
+
+def _assert_browser_runnable(onnx_out: Path) -> None:
+    """Fail if the graph has ops onnxruntime-web can't run.
+
+    A contrib-domain op or a CastLike loads fine on desktop and then throws in
+    the browser, so catch it here instead of at runtime
+    """
+    import onnx
+
+    graph = onnx.load(str(onnx_out)).graph
+    bad = {n.op_type for n in graph.node if (n.domain or "ai.onnx") != "ai.onnx"}
+    bad |= {n.op_type for n in graph.node if n.op_type == "CastLike"}
+    if bad:
+        raise SystemExit(f"{onnx_out.name} has ops onnxruntime-web can't run: {bad}")
 
 
 def export(name: str) -> None:
