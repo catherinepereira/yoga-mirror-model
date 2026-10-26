@@ -2,7 +2,7 @@
 
 Training repo for the Yoga Mirror pose classifier. Runs BlazePose over yoga
 photos, trains classifiers on the poses, and exports an ONNX artifact the app runs
-in the browser to name the pose you are in. The [Yoga Mirror App](https://yoga-mirror.vercel.app) depends only on the exported files from here.
+in the browser to name the pose you are in. The [Yoga Mirror App](https://reflect.cv/yoga-mirror/) depends only on the exported files from here.
 
 I trained four models to compare:
 
